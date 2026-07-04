@@ -4,9 +4,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import seaborn as sns
-import pickle
 import warnings
 warnings.filterwarnings('ignore')
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder
 
 # ── Page config ───────────────────────────────────────────────
 st.set_page_config(
@@ -36,20 +40,30 @@ st.markdown("""
 
 PALETTE = ['#C0392B', '#2C3E50', '#E67E22', '#27AE60', '#2980B9', '#8E44AD']
 
-# ── Load data & model ─────────────────────────────────────────
-@st.cache_data
-def load_data():
+# ── Load data & train model ───────────────────────────────────
+@st.cache_resource
+def load_all():
     rfm = pd.read_csv('rfm_clean.csv')
     tx  = pd.read_csv('transactions_clean.csv', parse_dates=['InvoiceDate'])
-    return rfm, tx
 
-@st.cache_resource
-def load_model():
-    with open('churn_model.pkl', 'rb') as f:
-        return pickle.load(f)
+    # Train model fresh (avoids pickle version mismatch)
+    num_features = ['Frequency', 'Monetary', 'AvgOrderValue']
+    cat_features = ['Country_grp']
+    X = rfm[num_features + cat_features]
+    y = rfm['Churn']
 
-rfm, tx = load_data()
-model   = load_model()
+    preprocessor = ColumnTransformer([
+        ('num', StandardScaler(), num_features),
+        ('cat', OneHotEncoder(handle_unknown='ignore'), cat_features)
+    ])
+    model = Pipeline([
+        ('prep', preprocessor),
+        ('clf', RandomForestClassifier(n_estimators=100, random_state=42))
+    ])
+    model.fit(X, y)
+    return rfm, tx, model
+
+rfm, tx, model = load_all()
 
 # ── Sidebar ───────────────────────────────────────────────────
 st.sidebar.image(
